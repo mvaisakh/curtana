@@ -136,6 +136,7 @@
 
 &thermal_zones {
 	/delete-node/ aoss-0-lowf;
+	/delete-node/ backlight_therm;
 };
 
 &usb0 {
