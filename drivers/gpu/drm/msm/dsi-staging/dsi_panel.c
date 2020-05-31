@@ -44,6 +44,11 @@
 #define DEFAULT_PANEL_PREFILL_LINES	25
 #define TICKS_IN_MICRO_SECOND		1000000
 
+extern void lcd_esd_enable(bool on);
+bool backlight_val;
+static int lcd_esd_irq_handler;
+char g_lcd_id[128];
+
 enum dsi_dsc_ratio_type {
 	DSC_8BPC_8BPP,
 	DSC_10BPC_8BPP,
@@ -471,6 +476,15 @@ exit:
 	return rc;
 }
 
+#if CONFIG_TOUCHSCREEN_COMMON
+static bool lcd_reset_keep_high = false;
+void set_lcd_reset_gpio_keep_high(bool en)
+{
+	lcd_reset_keep_high = en;
+}
+EXPORT_SYMBOL(set_lcd_reset_gpio_keep_high);
+#endif
+
 static int dsi_panel_power_off(struct dsi_panel *panel)
 {
 	int rc = 0;
@@ -478,8 +492,18 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 	if (gpio_is_valid(panel->reset_config.disp_en_gpio))
 		gpio_set_value(panel->reset_config.disp_en_gpio, 0);
 
-	if (gpio_is_valid(panel->reset_config.reset_gpio))
+	if (gpio_is_valid(panel->reset_config.reset_gpio)) {
+		#if CONFIG_TOUCHSCREEN_COMMON
+		if (lcd_reset_keep_high)
+			pr_warn("%s: lcd-reset-gpio keep high\n", __func__);
+		else {
+			gpio_set_value(panel->reset_config.reset_gpio, 0);
+			pr_err("%s: lcd-reset_gpio = 0\n", __func__);
+		}
+		#else
 		gpio_set_value(panel->reset_config.reset_gpio, 0);
+		#endif
+	}
 
 	if (gpio_is_valid(panel->reset_config.lcd_mode_sel_gpio))
 		gpio_set_value(panel->reset_config.lcd_mode_sel_gpio, 0);
@@ -493,6 +517,10 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 	rc = dsi_pwr_enable_regulator(&panel->power_info, false);
 	if (rc)
 		pr_err("[%s] failed to enable vregs, rc=%d\n", panel->name, rc);
+
+	if((strnstr(panel->name,"tianma",30) != NULL)) {
+		mdelay(5);
+	}
 
 	return rc;
 }
@@ -702,6 +730,12 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 	default:
 		pr_err("Backlight type(%d) not supported\n", bl->type);
 		rc = -ENOTSUPP;
+	}
+
+	if(bl_lvl > 0) {
+		backlight_val = true;
+	} else {
+	    backlight_val = false;
 	}
 
 	return rc;
@@ -1743,6 +1777,14 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-post-mode-switch-on-command",
 	"qcom,mdss-dsi-qsync-on-commands",
 	"qcom,mdss-dsi-qsync-off-commands",
+	"qcom,mdss-dsi-cabc-on-command",
+	"qcom,mdss-dsi-cabc-off-command",
+	"qcom,mdss-dsi-cabc_movie-on-command",
+	"qcom,mdss-dsi-cabc_still-on-command",
+	"qcom,mdss-dsi-hbm1-on-command",
+	"qcom,mdss-dsi-hbm2-on-command",
+	"qcom,mdss-dsi-hbm3-on-command",
+	"qcom,mdss-dsi-hbm-off-command",
 };
 
 const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
@@ -1769,6 +1811,14 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-post-mode-switch-on-command-state",
 	"qcom,mdss-dsi-qsync-on-commands-state",
 	"qcom,mdss-dsi-qsync-off-commands-state",
+	"qcom,mdss-dsi-cabc-on-command-state",
+	"qcom,mdss-dsi-cabc-off-command-state",
+	"qcom,mdss-dsi-cabc_movie-on-command-state",
+	"qcom,mdss-dsi-cabc_still-on-command-state",
+	"qcom,mdss-dsi-hbm1-on-command-state",
+	"qcom,mdss-dsi-hbm2-on-command-state",
+	"qcom,mdss-dsi-hbm3-on-command-state",
+	"qcom,mdss-dsi-hbm-off-command-state",
 };
 
 static int dsi_panel_get_cmd_pkt_count(const char *data, u32 length, u32 *cnt)
@@ -3180,6 +3230,24 @@ static int dsi_panel_parse_esd_config(struct dsi_panel *panel)
 
 	esd_config = &panel->esd_config;
 	esd_config->status_mode = ESD_MODE_MAX;
+
+	return 0;
+
+	esd_config->esd_err_irq_gpio = of_get_named_gpio(panel->panel_of_node,
+					   "qcom,esd-err-int-gpio", 0);
+	esd_config->esd_err_irq_flags =  IRQF_TRIGGER_FALLING | IRQF_ONESHOT;
+	if (gpio_is_valid(esd_config->esd_err_irq_gpio)) {
+		esd_config->esd_err_irq = gpio_to_irq(esd_config->esd_err_irq_gpio);
+		rc = gpio_request(esd_config->esd_err_irq_gpio, "esd_err_int_gpio");
+		if (rc)
+			pr_err("%s: Failed to get esd irq gpio %d (code: %d)",
+				 __func__, esd_config->esd_err_irq_gpio, rc);
+		else
+			gpio_direction_input(esd_config->esd_err_irq_gpio);
+
+		return 0;
+	}
+
 	esd_config->esd_enabled = utils->read_bool(utils->data,
 		"qcom,esd-check-enabled");
 
@@ -3255,6 +3323,38 @@ end:
 	utils->node = panel->panel_of_node;
 }
 
+static ssize_t msm_fb_lcd_name(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+	sprintf(buf, "%s\n", g_lcd_id);
+	ret = strlen(buf) + 1;
+	return ret;
+}
+
+static DEVICE_ATTR(lcd_name,0664,msm_fb_lcd_name,NULL);
+
+static struct kobject *msm_lcd_name;
+
+static int msm_lcd_name_create_sysfs(void){
+	int ret;
+	msm_lcd_name=kobject_create_and_add("android_lcd",NULL);
+
+	if(msm_lcd_name==NULL){
+		pr_info("msm_lcd_name_create_sysfs_ failed\n");
+		ret=-ENOMEM;
+		return ret;
+	}
+
+	ret=sysfs_create_file(msm_lcd_name,&dev_attr_lcd_name.attr);
+
+	if(ret){
+		pr_info("%s failed \n",__func__);
+		kobject_del(msm_lcd_name);
+	}
+	return 0;
+}
+
 struct dsi_panel *dsi_panel_get(struct device *parent,
 				struct device_node *of_node,
 				struct device_node *parser_node,
@@ -3281,6 +3381,9 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 				"qcom,mdss-dsi-panel-name", NULL);
 	if (!panel->name)
 		panel->name = DSI_PANEL_DEFAULT_LABEL;
+
+	strcpy(g_lcd_id,panel->name);
+	msm_lcd_name_create_sysfs();
 
 	/*
 	 * Set panel type to LCD as default.
@@ -3406,7 +3509,7 @@ int dsi_panel_drv_init(struct dsi_panel *panel,
 	 */
 	dev->channel = 0;
 	dev->lanes = 4;
-
+	lcd_esd_irq_handler = 0;
 	panel->host = host;
 	rc = dsi_panel_vreg_get(panel);
 	if (rc) {
@@ -4227,6 +4330,15 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 	return rc;
 }
 
+void lcd_esd_handler(bool on)
+{
+	if(on)
+		lcd_esd_irq_handler = 1;
+	else
+		lcd_esd_irq_handler = 0;
+}
+EXPORT_SYMBOL(lcd_esd_handler);
+
 int dsi_panel_enable(struct dsi_panel *panel)
 {
 	int rc = 0;
@@ -4245,6 +4357,16 @@ int dsi_panel_enable(struct dsi_panel *panel)
 	else
 		panel->panel_initialized = true;
 	mutex_unlock(&panel->panel_lock);
+
+	if(lcd_esd_irq_handler == 1){
+		enable_irq(panel->esd_config.esd_err_irq);
+		lcd_esd_irq_handler = 0;
+	}
+
+	if((strnstr(panel->name,"tianma",30) != NULL)){
+		lcd_esd_enable(1);
+	}
+
 	return rc;
 }
 
@@ -4316,6 +4438,10 @@ int dsi_panel_disable(struct dsi_panel *panel)
 			dsi_pwr_panel_regulator_mode_set(&panel->power_info,
 				"ibb", REGULATOR_MODE_STANDBY);
 
+		if((strnstr(panel->name,"tianma",30) != NULL)){
+			lcd_esd_enable(0);
+		}
+
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_OFF);
 		if (rc) {
 			/*
@@ -4377,6 +4503,31 @@ int dsi_panel_post_unprepare(struct dsi_panel *panel)
 		goto error;
 	}
 error:
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_panel_set_feature(struct dsi_panel *panel,enum dsi_cmd_set_type type)
+{
+	int rc = 0;
+
+	if (!panel) {
+		pr_err("Invalid params\n");
+		return -EINVAL;
+	}
+	pr_info("xinj:%s panel_initialized=%d type=%d backlight_val = %d\n",
+			__func__,panel->panel_initialized,type,backlight_val);
+	if (!panel->panel_initialized || !backlight_val) {
+		pr_err("xinj: con't set cmds type=%d\n",type);
+		return -EINVAL;
+	}
+	mutex_lock(&panel->panel_lock);
+
+	rc = dsi_panel_tx_cmd_set(panel, type);
+	if (rc) {
+		pr_err("[%s] failed to send DSI_CMD_SET_FEATURE_ON/OFF cmds, rc=%d,type=%d\n",
+		     panel->name, rc,type);
+	}
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
