@@ -28,6 +28,17 @@
 #include "storm-watch.h"
 #include "schgm-flash.h"
 
+#if CONFIG_TOUCHSCREEN_XIAOMI_COMMON
+typedef struct touchscreen_usb_piugin_data{
+	bool valid;
+	bool usb_plugged_in;
+	void (*event_callback)(void);
+} touchscreen_usb_piugin_data_t;
+
+touchscreen_usb_piugin_data_t g_touchscreen_usb_pulgin = {0};
+EXPORT_SYMBOL(g_touchscreen_usb_pulgin);
+#endif
+
 #define smblib_err(chg, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chg->name,	\
 		__func__, ##__VA_ARGS__)	\

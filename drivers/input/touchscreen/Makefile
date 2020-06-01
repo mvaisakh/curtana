@@ -108,3 +108,6 @@ obj-$(CONFIG_TOUCHSCREEN_ROHM_BU21023)	+= rohm_bu21023.o
 obj-$(CONFIG_TOUCHSCREEN_ST)		+= st/
 obj-$(CONFIG_TOUCHSCREEN_HIMAX_CHIPSET)	+= hxchipset/
 obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_TCM)	+= synaptics_tcm/
+obj-$(CONFIG_TOUCHSCREEN_XIAOMI_COMMON)			+= xiaomi_common/
+obj-$(CONFIG_TOUCHSCREEN_FTS)                   += ft8756_spi/
+obj-$(CONFIG_TOUCHSCREEN_NT36xxx_HOSTDL_SPI)    += nt36xxx_spi/

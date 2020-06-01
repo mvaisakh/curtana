@@ -476,7 +476,7 @@ exit:
 	return rc;
 }
 
-#if CONFIG_TOUCHSCREEN_COMMON
+#if CONFIG_TOUCHSCREEN_XIAOMI_COMMON
 static bool lcd_reset_keep_high = false;
 void set_lcd_reset_gpio_keep_high(bool en)
 {
@@ -493,7 +493,7 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 		gpio_set_value(panel->reset_config.disp_en_gpio, 0);
 
 	if (gpio_is_valid(panel->reset_config.reset_gpio)) {
-		#if CONFIG_TOUCHSCREEN_COMMON
+		#if CONFIG_TOUCHSCREEN_XIAOMI_COMMON
 		if (lcd_reset_keep_high)
 			pr_warn("%s: lcd-reset-gpio keep high\n", __func__);
 		else {

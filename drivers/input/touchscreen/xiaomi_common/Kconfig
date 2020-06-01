@@ -1,0 +1,5 @@
+#
+# Xiaomi Common Touchscreen feature
+#
+
+source "drivers/input/touchscreen/xiaomi_common/aaabbb/Kconfig"
