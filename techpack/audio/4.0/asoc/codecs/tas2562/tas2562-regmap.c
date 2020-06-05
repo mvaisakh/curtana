@@ -1163,41 +1163,6 @@ static int tas2562_i2c_remove(struct i2c_client *p_client)
 	return 0;
 }
 
-
-static const struct i2c_device_id tas2562_i2c_id[] = {
-	{ "tas2562", 0},
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, tas2562_i2c_id);
-
-#if defined(CONFIG_OF)
-static const struct of_device_id tas2562_of_match[] = {
-	{ .compatible = "ti,tas2562" },
-	{},
-};
-MODULE_DEVICE_TABLE(of, tas2562_of_match);
-#endif
-
-static const struct dev_pm_ops tas2562_pm_ops = {
-	.suspend = tas2562_pm_suspend,
-	.resume = tas2562_pm_resume
-};
-
-static struct i2c_driver tas2562_i2c_driver = {
-	.driver = {
-		.name   = "tas2562",
-		.owner  = THIS_MODULE,
-#if defined(CONFIG_OF)
-		.of_match_table = of_match_ptr(tas2562_of_match),
-#endif
-		.pm = &tas2562_pm_ops,
-	},
-	.probe      = tas2562_i2c_probe,
-	.remove     = tas2562_i2c_remove,
-	.id_table   = tas2562_i2c_id,
-};
-
-module_i2c_driver(tas2562_i2c_driver);
 MODULE_AUTHOR("Texas Instruments Inc.");
 MODULE_DESCRIPTION("TAS2562 I2C Smart Amplifier driver");
 MODULE_LICENSE("GPL v2");
