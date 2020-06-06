@@ -113,6 +113,13 @@ static void vote_min(struct votable *votable, int client_id,
 			*eff_id = i;
 		}
 	}
+
+	if (strcmp(votable->name, "QG_WS") != 0) {
+		if(votable->votes[i].enabled)
+			pr_info("%s: val: %d\n", votable->client_strs[i],
+					votable->votes[i].value);
+	}
+
 	if (*eff_id == -EINVAL)
 		*eff_res = -EINVAL;
 }
